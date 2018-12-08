@@ -171,11 +171,11 @@ trans(dec, gauge, Metric, Val) ->
     hold(gauge, Metric, -Val).
 
 hold(Type, Metric, Val) when Type =:= counter orelse Type =:= gauge ->
+    K = {Type, Metric},
     put('$metrics', case get('$metrics') of
-                        undefined ->
-                            #{{Type, Metric} => Val};
-                        Metrics ->
-                            maps:update_with({Type, Metric}, fun(Cnt) -> Cnt + Val end, Val, Metrics)
+                        undefined -> #{K => Val};
+                        #{K := Cnt} = Metrics -> Metrics#{K := Cnt+Val};
+                        Metrics -> Metrics#{K => Val}
                     end).
 
 commit() ->
@@ -241,43 +241,48 @@ qos_received(?QOS_2) ->
 
 %% @doc Count packets received. Will not count $SYS PUBLISH.
 -spec(sent(emqx_mqtt_types:packet()) -> ignore | non_neg_integer()).
-sent(?PUBLISH_PACKET(_QoS, <<"$SYS/", _/binary>>, _, _)) ->
-    ignore;
-sent(Packet) ->
-    inc('packets/sent'),
-    sent1(Packet).
-sent1(?PUBLISH_PACKET(QoS, _PktId)) ->
-    inc('packets/publish/sent'),
-    inc('messages/sent'),
-    qos_sent(QoS);
-sent1(?PACKET(Type)) ->
-    sent2(Type).
-sent2(?CONNACK) ->
-    inc('packets/connack');
-sent2(?PUBACK) ->
-    inc('packets/puback/sent');
-sent2(?PUBREC) ->
-    inc('packets/pubrec/sent');
-sent2(?PUBREL) ->
-    inc('packets/pubrel/sent');
-sent2(?PUBCOMP) ->
-    inc('packets/pubcomp/sent');
-sent2(?SUBACK) ->
-    inc('packets/suback');
-sent2(?UNSUBACK) ->
-    inc('packets/unsuback');
-sent2(?PINGRESP) ->
-    inc('packets/pingresp');
-sent2(?DISCONNECT) ->
-    inc('packets/disconnect/sent');
-sent2(_Type) ->
+sent(?PUBLISH_PACKET(QoS, Topic, _PckId, _Payload)) ->
+    trans(inc, 'packets/sent'),
+    case Topic of
+        <<"$SYS/", _/binary>> -> ignore;
+        _ ->
+            trans(inc, 'packets/publish/sent'),
+            trans(inc, 'messages/sent'),
+            qos_sent(QoS)
+    end;
+sent(?PACKET(Type)) ->
+    trans(inc, 'packets/sent'),
+    do_sent(Type);
+sent(_Packet) ->
     ignore.
+
+do_sent(?CONNACK) ->
+    trans(inc, 'packets/connack');
+do_sent(?PUBACK) ->
+    trans(inc, 'packets/puback/sent');
+do_sent(?PUBREC) ->
+    trans(inc, 'packets/pubrec/sent');
+do_sent(?PUBREL) ->
+    trans(inc, 'packets/pubrel/sent');
+do_sent(?PUBCOMP) ->
+    trans(inc, 'packets/pubcomp/sent');
+do_sent(?SUBACK) ->
+    trans(inc, 'packets/suback');
+do_sent(?UNSUBACK) ->
+    trans(inc, 'packets/unsuback');
+do_sent(?PINGRESP) ->
+    trans(inc, 'packets/pingresp');
+do_sent(?DISCONNECT) ->
+    trans(inc, 'packets/disconnect/sent');
+do_sent(_Type) ->
+    ignore.
+
 qos_sent(?QOS_0) ->
-    inc('messages/qos0/sent');
+    trans(inc, 'messages/qos0/sent');
 qos_sent(?QOS_1) ->
-    inc('messages/qos1/sent');
+    trans(inc, 'messages/qos1/sent');
 qos_sent(?QOS_2) ->
-    inc('messages/qos2/sent').
+    trans(inc, 'messages/qos2/sent').
 
 %%-----------------------------------------------------------------------------
 %% gen_server callbacks
