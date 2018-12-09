@@ -167,10 +167,10 @@ init_limiter({Rate, Burst}) ->
 
 send_fun(Transport, Socket) ->
     fun(Packet, Options) ->
-        Data = emqx_frame:serialize(Packet, Options),
+        {Data, Size} = emqx_frame:serialize(Packet, Options),
         try Transport:async_send(Socket, Data) of
             ok ->
-                emqx_metrics:trans(inc, 'bytes/sent', iolist_size(Data)),
+                emqx_metrics:trans(inc, 'bytes/sent', Size),
                 ok;
             Error -> Error
         catch

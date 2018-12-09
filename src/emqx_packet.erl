@@ -127,7 +127,7 @@ from_message(PacketId, #message{qos = QoS, flags = Flags, headers = Headers,
                  variable = Publish, payload = Payload}.
 
 publish_props(Headers) ->
-    maps:with(['Payload-Format-Indicator',
+    maps_with(['Payload-Format-Indicator',
                'Response-Topic',
                'Correlation-Data',
                'User-Property',
@@ -254,3 +254,15 @@ format_password(_Password) -> '******'.
 i(true)  -> 1;
 i(false) -> 0;
 i(I) when is_integer(I) -> I.
+
+maps_with([K|Ks], Map) ->
+    maps_with([K|Ks], Map, #{}).
+
+maps_with([K|Ks], Map, Acc) ->
+    case maps:get(K, Map, nil) of
+        nil -> Acc;
+        V ->
+            maps_with(Ks, Map, Acc#{K => V})
+    end;
+maps_with([], _Map, Acc) -> Acc.
+

@@ -154,7 +154,7 @@ set(gauge, Metric, Val) ->
     ets:insert(?TAB, {key(gauge, Metric), Val}).
 
 trans(inc, Metric) ->
-    trans(inc, {counter, Metric}, 1).
+    trans(inc, counter, Metric, 1).
 
 trans(Opt, {gauge, Metric}, Val) ->
     trans(Opt, gauge, Metric, Val);

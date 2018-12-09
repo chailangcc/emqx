@@ -365,7 +365,7 @@ parse_binary_data(<<Len:16/big, Data:Len/binary, Rest/binary>>) ->
 serialize(Packet) ->
     serialize(Packet, ?DEFAULT_OPTIONS).
 
--spec(serialize(emqx_mqtt_types:packet(), options()) -> iodata()).
+-spec(serialize(emqx_mqtt_types:packet(), options()) -> {iodata(), Size :: integer()}).
 serialize(#mqtt_packet{header   = Header,
                        variable = Variable,
                        payload  = Payload}, Options) when is_map(Options) ->
@@ -376,10 +376,12 @@ serialize(#mqtt_packet_header{type   = Type,
                               qos    = QoS,
                               retain = Retain}, VariableBin, PayloadBin)
     when ?CONNECT =< Type andalso Type =< ?AUTH ->
-    Len = iolist_size(VariableBin) + iolist_size(PayloadBin),
-    (Len =< ?MAX_PACKET_SIZE) orelse error(mqtt_frame_too_large),
-    [<<Type:4, (flag(Dup)):1, (flag(QoS)):2, (flag(Retain)):1>>,
-     serialize_remaining_len(Len), VariableBin, PayloadBin].
+    RemainLen = iolist_size(VariableBin) + iolist_size(PayloadBin),
+    (RemainLen =< ?MAX_PACKET_SIZE) orelse error(mqtt_frame_too_large),
+    {BRemainLen, LenBL} = serialize_remaining_len(RemainLen),
+    {[<<Type:4, (flag(Dup)):1, (flag(QoS)):2, (flag(Retain)):1>>,
+      BRemainLen, VariableBin, PayloadBin],
+     1+LenBL+RemainLen}.
 
 serialize_variable(#mqtt_packet_connect{
                       proto_name   = ProtoName,
@@ -431,7 +433,7 @@ serialize_variable(#mqtt_packet_publish{topic_name = TopicName,
                                         packet_id  = PacketId,
                                         properties = Properties},
                    #{version := Ver}) ->
-    [serialize_utf8_string(TopicName),
+    [serialize_string(TopicName),
      if
          PacketId =:= undefined -> <<>>;
          true -> <<PacketId:16/big-unsigned-integer>>
@@ -613,8 +615,14 @@ serialize_utf8_string(String) ->
     true = (Len =< 16#ffff),
     <<Len:16/big, StringBin/binary>>.
 
+serialize_string(String) ->
+    Len = byte_size(String),
+    true = (Len =< 16#ffff),
+    <<Len:16/big, String/binary>>.
+
 serialize_remaining_len(I) ->
-    serialize_variable_byte_integer(I).
+    Bin = serialize_variable_byte_integer(I),
+    {Bin, byte_size(Bin)}.
 
 serialize_variable_byte_integer(N) when N =< ?LOWBITS ->
     <<0:1, N:7>>;
